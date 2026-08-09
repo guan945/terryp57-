@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Sync inbox/*.json (xueqiu posts) into Notion database. Stdlib only."""
-import json, os, sys, time, urllib.request, urllib.error
+import json, os, re, sys, time, urllib.request, urllib.error
 from datetime import datetime, timezone, timedelta
 
 CST = timezone(timedelta(hours=8))
@@ -47,6 +47,21 @@ def iso_cst(ms):
 
 def fmt_dt(ms):
     return datetime.fromtimestamp(ms / 1000, CST).strftime("%Y-%m-%d %H:%M")
+
+def clean_html(t):
+    if not t:
+        return ""
+    if "<" not in t and "&" not in t:
+        return t.strip()
+    t = re.sub(r'<img[^>]*(?:title|alt)="([^"]*)"[^>]*/?>', r'\\1', t)
+    t = re.sub(r'<img[^>]*/?>', '', t)
+    t = re.sub(r'<a[^>]*>(.*?)</a>', r'\\1', t, flags=re.S)
+    t = re.sub(r'<br\\s*/?>', '\\n', t, flags=re.I)
+    t = re.sub(r'</(?:p|div|blockquote|h[1-6]|li)>', '\\n', t, flags=re.I)
+    t = re.sub(r'<[^>]+>', '', t)
+    t = t.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>').replace('&quot;', '"').replace('&#39;', "'").replace('&nbsp;', ' ')
+    t = re.sub(r'\\n{3,}', '\\n\\n', t)
+    return t.strip()
 
 def _para_blocks(text):
     blocks = []
@@ -119,7 +134,7 @@ def find_or_create_db(token, cfg, src):
 
 def exists(token, db_id, pid):
     q = api("POST", "/databases/%s/query" % db_id,
-            data={"filter": {"property": "\u5e16\u5b50ID", "number": {"equals": pid}}, "page_size": 1},
+            data={"filter": {"property": "\u5e16\u5b50ID", "number": {"equals": int(pid)}}, "page_size": 1},
             token=token)
     return bool(q.get("results"))
 
@@ -128,10 +143,11 @@ def rich(c):
 
 def create_page(token, db_id, rec):
     c = rec.get("c") or [0, 0, 0]
-    title = "%s [%s] %s" % (fmt_dt(rec["ts"]).replace(" ", " "), rec.get("ty", ""), (rec.get("txt") or "")[:30])
+    txt = clean_html(rec.get("txt") or "")
+    title = "%s [%s] %s" % (fmt_dt(rec["ts"]).replace(" ", " "), rec.get("ty", ""), txt[:30])
     props = {
         "\u6807\u9898": {"title": rich(title[:200])},
-        "\u5e16\u5b50ID": {"number": rec["id"]},
+        "\u5e16\u5b50ID": {"number": int(rec["id"])},
         "\u53d1\u5e03\u65f6\u95f4": {"date": {"start": iso_cst(rec["ts"])}},
         "\u7c7b\u578b": {"select": {"name": rec.get("ty") or "\u539f\u521b"}},
         "\u56de\u590d\u6570": {"number": c[0]},
@@ -143,14 +159,14 @@ def create_page(token, db_id, rec):
     children = []
     if rec.get("title"):
         children += [{"object": "block", "type": "heading_2",
-                      "heading_2": {"rich_text": rich(rec["title"])}}]
-    children += _para_blocks(rec.get("txt"))
+                      "heading_2": {"rich_text": rich(clean_html(rec["title"]))}}]
+    children += _para_blocks(txt)
     q = rec.get("q")
     if q and q.get("txt"):
         children += [{"object": "block", "type": "divider", "divider": {}}]
         head = "\u25ce \u5f15\u7528 @%s\uff1a" % q.get("u", "")
         children += [{"object": "block", "type": "quote",
-                      "quote": {"rich_text": rich(head + q["txt"])}}]
+                      "quote": {"rich_text": rich(head + clean_html(q["txt"])[:1500])}}]
     body = {"parent": {"database_id": db_id}, "properties": props}
     if children:
         body["children"] = children[:100]
