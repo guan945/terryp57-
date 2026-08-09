@@ -59,12 +59,26 @@ def _para_blocks(text):
     return blocks or [{"object": "block", "type": "paragraph",
                        "paragraph": {"rich_text": [{"type": "text", "text": {"content": "(空)"}}]}}]
 
-def find_or_create_db(token, parent_page_id, db_title):
+def get_user_cfg(cfg, src):
+    users = cfg.get("users", {})
+    if src in users:
+        u = users[src]
+        return u.get("database_title", src + "\u96ea\u7403\u52a8\u6001"), u.get("id_file", "state/notion-db.id")
+    safe = "".join(ch if (ch.isalnum() or ch in "-_") else "-" for ch in src)[:40] or "user"
+    return src + "\u96ea\u7403\u52a8\u6001", "state/notion-db-" + safe + ".id"
+
+def find_or_create_db(token, cfg, src):
+    db_title, id_file = get_user_cfg(cfg, src)
     os.makedirs("state", exist_ok=True)
-    if os.path.exists(DB_ID_FILE):
-        v = open(DB_ID_FILE).read().strip()
+    if os.path.exists(id_file):
+        v = open(id_file).read().strip()
         if v:
-            return v
+            try:
+                api("GET", "/databases/" + v, token=token)
+                return v
+            except Exception:
+                pass
+    parent_page_id = cfg["notion_parent_page_id"]
     cursor = None
     while True:
         path = "/blocks/%s/children?page_size=100" % parent_page_id
@@ -74,8 +88,8 @@ def find_or_create_db(token, parent_page_id, db_title):
         for b in d.get("results", []):
             if b.get("type") == "child_database":
                 if b.get("child_database", {}).get("title") == db_title:
-                    open(DB_ID_FILE, "w").write(b["id"])
-                    print("found existing database:", b["id"])
+                    open(id_file, "w").write(b["id"])
+                    print("found existing database for %s: %s" % (src, b["id"]))
                     return b["id"]
         if not d.get("has_more"):
             break
@@ -99,8 +113,8 @@ def find_or_create_db(token, parent_page_id, db_title):
     }
     d = api("POST", "/databases", data=payload, token=token)
     dbid = d["id"]
-    open(DB_ID_FILE, "w").write(dbid)
-    print("created database:", dbid)
+    open(id_file, "w").write(dbid)
+    print("created database for %s: %s" % (src, dbid))
     return dbid
 
 def exists(token, db_id, pid):
@@ -149,7 +163,7 @@ def main():
         print("ERROR: NOTION_TOKEN missing"); sys.exit(1)
     os.makedirs("inbox", exist_ok=True)
     os.makedirs("processed", exist_ok=True)
-    db_id = find_or_create_db(token, cfg["notion_parent_page_id"], cfg["database_title"])
+    db_cache = {}
     files = sorted(f for f in os.listdir("inbox") if f.endswith(".json"))
     print("inbox files:", len(files))
     total_created = total_skip = total_err = 0
@@ -165,6 +179,10 @@ def main():
         fc = fs = fe = 0
         for rec in recs:
             try:
+                s = rec.get("src") or "terryp57"
+                if s not in db_cache:
+                    db_cache[s] = find_or_create_db(token, cfg, s)
+                db_id = db_cache[s]
                 if exists(token, db_id, rec["id"]):
                     fs += 1
                 else:
