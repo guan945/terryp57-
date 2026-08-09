@@ -1,9 +1,23 @@
 {
-  "notion_parent_page_id": "3b3bb84c-63bb-8070-8204-e2c40bb4dc01",
-  "database_title": "terryp57雪球动态",
-  "xueqiu": {
-    "user_id": 2151206013,
-    "screen_name": "terryp57",
-    "home": "https://xueqiu.com/u/2151206013"
+ "notion_parent_page_id": "3b3bb84c-63bb-8070-8204-e2c40bb4dc01",
+ "database_title": "terryp57雪球动态",
+ "xueqiu": {
+  "user_id": 2151206013,
+  "screen_name": "terryp57",
+  "home": "https://xueqiu.com/u/2151206013"
+ },
+ "users": {
+  "terryp57": {
+   "user_id": 2151206013,
+   "home": "https://xueqiu.com/u/2151206013",
+   "database_title": "terryp57雪球动态",
+   "id_file": "state/notion-db.id"
+  },
+  "律动周期研究所": {
+   "user_id": 1006269237,
+   "home": "https://xueqiu.com/u/1006269237",
+   "database_title": "律动周期研究所雪球动态",
+   "id_file": "state/notion-db-lvzhou.id"
   }
+ }
 }
